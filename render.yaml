@@ -1,0 +1,48 @@
+services:
+  # ─── Flask API (web service) ───────────────────────────────────
+  - type: web
+    name: bomber-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn api_server:app --bind 0.0.0.0:$PORT --workers 2
+    envVars:
+      - key: BACKEND_SECRET
+        sync: false
+      - key: FIREBASE_URL
+        sync: false
+      - key: CLOUDNEST_API_KEY
+        value: cn_46df41f9832b438da28404d04c878367
+      - key: FREE_SENDER_EMAIL
+        sync: false
+      - key: FREE_SENDER_PASS
+        sync: false
+      - key: FREE_SMS_DAILY
+        value: "50"
+      - key: FREE_EMAIL_DAILY
+        value: "200"
+      - key: CONTACT_TG
+        sync: false
+
+  # ─── Telegram Bot (worker) ────────────────────────────────────
+  - type: worker
+    name: bomber-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: FIREBASE_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: BACKEND_SECRET
+        sync: false
+      - key: FREE_SMS_DAILY
+        value: "50"
+      - key: FREE_EMAIL_DAILY
+        value: "200"
+      - key: CONTACT_TG
+        sync: false
