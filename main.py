@@ -8,6 +8,7 @@ Start: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4
 import os, re, time, uuid, json, string, random, smtplib, threading, requests
 from datetime import datetime, date
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import telebot
 from telebot.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
@@ -33,6 +34,19 @@ FREE_SENDER_PASS   = os.environ.get("FREE_SENDER_PASS","")
 # FLASK APP
 # ══════════════════════════════════════════════════════════════
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Api-Key"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
+
+@app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
+@app.route("/<path:path>", methods=["OPTIONS"])
+def handle_options(path):
+    return jsonify({}), 200
 
 # ══════════════════════════════════════════════════════════════
 # TELEGRAM BOT
@@ -762,14 +776,26 @@ def route_email():
 
 # ══════════════════════════════════════════════════════════════
 # STARTUP — bot polls in background thread, gunicorn serves Flask
+# gunicorn must use --workers 1 --preload to avoid duplicate bots
 # ══════════════════════════════════════════════════════════════
 def _run_bot():
-    print("🤖 Bot polling started...")
-    bot.infinity_polling(skip_pending=True, timeout=30)
+    while True:
+        try:
+            print("🤖 Bot polling started...")
+            bot.infinity_polling(skip_pending=True, timeout=30, long_polling_timeout=20)
+        except Exception as ex:
+            print(f"⚠️ Bot crashed: {ex} — restarting in 5s...")
+            time.sleep(5)
 
-bot_thread = threading.Thread(target=_run_bot, daemon=True)
-bot_thread.start()
+# Start bot only once — guard against gunicorn worker re-imports
+_BOT_STARTED = os.environ.get("_BOT_STARTED_PID")
+_MY_PID      = str(os.getpid())
+
+if _BOT_STARTED != _MY_PID:
+    os.environ["_BOT_STARTED_PID"] = _MY_PID
+    bot_thread = threading.Thread(target=_run_bot, daemon=True)
+    bot_thread.start()
+    print(f"✅ Bot thread launched from PID {_MY_PID}")
 
 if __name__ == "__main__":
-    # local dev only
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8000)), debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=False)
